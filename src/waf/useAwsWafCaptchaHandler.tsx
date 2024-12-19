@@ -1,19 +1,15 @@
 import { useEffect } from "react";
-import {
-  AWS_WAF_TOKEN_HEADER_KEY,
-  awsWafToken,
-  loadAwsWafScript,
-} from "../waf";
+import { AWS_WAF_TOKEN_HEADER_KEY, awsWafToken, loadAwsWafScript } from "../waf";
 import { getAxiosInstance } from "../conf/axios";
 
 export const useAwsWafCaptchaHandler = () => {
   useEffect(() => {
-    const axios = getAxiosInstance();
-    let reqInterceptor: number;
+    const axiosInstance = getAxiosInstance();
+    let requestInterceptor: number;
 
-    const setupAxiosInterceptors = async () => {
+    const initializeInterceptors = async () => {
       await loadAwsWafScript();
-      reqInterceptor = axios.interceptors.request.use(
+      requestInterceptor = axiosInstance.interceptors.request.use(
         async (config) => {
           config.headers[AWS_WAF_TOKEN_HEADER_KEY] = await awsWafToken();
           return config;
@@ -22,9 +18,10 @@ export const useAwsWafCaptchaHandler = () => {
       );
     };
 
-    setupAxiosInterceptors();
+    initializeInterceptors();
+
     return () => {
-      axios.interceptors.request.eject(reqInterceptor);
+      axiosInstance.interceptors.request.eject(requestInterceptor);
     };
   }, []);
 };

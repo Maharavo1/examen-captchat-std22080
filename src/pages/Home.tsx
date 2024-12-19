@@ -1,94 +1,130 @@
-import { Box, Button, TextField, Typography, List, ListItem } from "@mui/material";
+import { Box, Button, TextField, Typography } from "@mui/material";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { v4 as uuid } from "uuid";
+import { getAxiosInstance } from "../conf/axios";
+import { AxiosError } from "axios";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
-const WafFormSchema = z.object({
-  N: z.string()
+const FormSchema = z.object({
+  N: z.string(),
 });
 
-type WafFormType = z.infer<typeof WafFormSchema>;
+type FormType = z.infer<typeof FormSchema>;
+const API_URL = "https://api.prod.jcloudify.com/whoami";
+
 export const Home = () => {
-  const [countConf, setCountConf] = useState<{ maxCount: number; isDoingSequence: boolean; current: number }>({
-    current: 0,
-    isDoingSequence: false,
-    maxCount: 0
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const [state, setState] = useState<{
+    timer: NodeJS.Timeout | null;
+    limit: number;
+    inProgress: boolean;
+    currentIndex: number;
+  }>({
+    currentIndex: +(searchParams.get("current") ?? 0),
+    inProgress: searchParams.get("current") !== null,
+    limit: +(searchParams.get("max") ?? 0),
+    timer: null,
   });
 
-  const { register, handleSubmit } = useForm<WafFormType>({
+  const { register, handleSubmit } = useForm<FormType>({
     defaultValues: {
-      N: "1"
+      N: "1",
     },
-    resolver: zodResolver(WafFormSchema)
+    resolver: zodResolver(FormSchema),
   });
 
-  const doSequence = (data: WafFormType) => {
-    setCountConf({
-      current: 0,
-      isDoingSequence: true,
-      maxCount: +data.N
+  useEffect(() => {
+    if (!state.inProgress) return;
+
+    const interval = setInterval(() => {
+      verifyIdentity();
+    }, 1000);
+
+    setState((prev) => ({
+      ...prev,
+      timer: interval,
+    }));
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [state.inProgress]);
+
+  const verifyIdentity = async () => {
+    try {
+      await getAxiosInstance().get(API_URL);
+      throw new Error("Expected error");
+    } catch (error) {
+      if ((error as AxiosError).status === 405) {
+        navigate(`/verification?current=${state.currentIndex}&max=${state.limit}`);
+        return;
+      }
+      setState((prev) => ({
+        ...prev,
+        currentIndex: prev.currentIndex + 1,
+      }));
+    }
+  };
+
+  useEffect(() => {
+    if (state.currentIndex >= state.limit) {
+      if (state.timer) clearInterval(state.timer);
+      setState({
+        currentIndex: 0,
+        timer: null,
+        limit: 1,
+        inProgress: false,
+      });
+    }
+  }, [state.currentIndex, state.limit]);
+
+  const startSequence = (data: FormType) => {
+    setState({
+      currentIndex: 0,
+      inProgress: true,
+      limit: +data.N,
+      timer: null,
     });
   };
 
-  const logs = Array(countConf.maxCount).fill(0);
+  const logItems = Array(state.currentIndex).fill(0);
 
   return (
-    <Box sx={{ mx: "auto", width: "fit-content", textAlign: "center", py: 4 }}>
+    <Box sx={{ mx: "auto", width: "fit-content" }}>
+      {state.inProgress && (
+        <Typography
+          sx={{ textAlign: "center", fontSize: "1rem", opacity: 0.8, fontWeight: "bold", mt: 5, mb: 2 }}
+        >
+          Total Steps: {state.limit}
+          <br />
+          Current Step: {state.currentIndex}
+        </Typography>
+      )}
       <Typography
-        sx={{
-          fontSize: "1.5rem",
-          fontWeight: "bold",
-          color: "#1976d2",
-          mb: 2
-        }}
+        sx={{ textAlign: "center", fontSize: "1rem", opacity: 0.8, fontWeight: "bold", mt: 5, mb: 2 }}
       >
-        STD22080
+        Application Tracker
       </Typography>
-      {!countConf.isDoingSequence && (
-        <form onSubmit={handleSubmit(doSequence)}>
-          <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-            <TextField
-              type="number"
-              placeholder="Enter N value"
-              {...register("N")}
-              sx={{ width: 250 }}
-              variant="outlined"
-              label="N Value"
-            />
-            <Button
-              variant="contained"
-              type="submit"
-              sx={{
-                backgroundColor: "#1976d2",
-                "&:hover": { backgroundColor: "#125ca8" },
-                width: 150
-              }}
-            >
-              Submit
-            </Button>
-          </Box>
+      {!state.inProgress && (
+        <form onSubmit={handleSubmit(startSequence)}>
+          <TextField
+            type="number"
+            placeholder="Enter a value"
+            {...register("N")}
+            sx={{ mb: 2 }}
+          />
+          <Button variant="contained" type="submit">
+            Start
+          </Button>
         </form>
       )}
-      {countConf.isDoingSequence && (
-        <List sx={{ mt: 3, maxHeight: 300, overflowY: "auto", px: 2 }}>
-          {logs.map((_, index) => (
-            <ListItem
-              key={uuid()}
-              sx={{
-                backgroundColor: index % 2 === 0 ? "#f5f5f5" : "#e0e0e0",
-                borderRadius: 1,
-                mb: 1,
-                px: 2,
-                fontWeight: "bold"
-              }}
-            >
-              {index + 1} Forbidden
-            </ListItem>
-          ))}
-        </List>
-      )}
+      {logItems.map((_, idx) => (
+        <li key={uuid()}>{idx + 1} Action Not Allowed</li>
+      ))}
     </Box>
   );
 };

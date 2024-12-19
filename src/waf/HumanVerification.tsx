@@ -5,31 +5,28 @@ import { loadAwsWafScript } from "../waf";
 import { Env } from "../conf/env";
 
 export const HumanVerification = () => {
-  const [p] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-
-  const redirectTo = "/?current=" + p.get("current") + "&maxCount=" + p.get("maxCount");
+  const redirectURL = `/?current=${searchParams.get("current")}&max=${searchParams.get("max")}`;
 
   const captchaContainerRef = useRef<HTMLDivElement>(null);
   const captchaRef = useRef<HTMLDivElement>(null);
-  const isCaptchaOpen = useRef(false);
+  const captchaOpen = useRef(false);
 
-  const renderCaptcha = async (): Promise<string | undefined> => {
+  const displayCaptcha = async (): Promise<string | undefined> => {
     const { awsWafCaptcha } = await loadAwsWafScript();
 
-    if (isCaptchaOpen.current) {
-      return Promise.resolve(undefined);
-    }
+    if (captchaOpen.current) return;
 
-    isCaptchaOpen.current = true;
+    captchaOpen.current = true;
 
-    return new Promise<string>((resolve) => {
-      captchaRef.current?.firstElementChild?.remove();
+    return new Promise((resolve) => {
+      captchaRef.current?.firstChild?.remove();
       awsWafCaptcha.renderCaptcha(captchaRef.current!, {
         apiKey: Env.wafApiKey,
         onSuccess: (token: string) => {
-          isCaptchaOpen.current = false;
-          navigate(redirectTo);
+          captchaOpen.current = false;
+          navigate(redirectURL);
           resolve(token);
         },
       });
@@ -37,17 +34,13 @@ export const HumanVerification = () => {
   };
 
   useEffect(() => {
-    renderCaptcha();
+    displayCaptcha();
   }, []);
 
   return (
     <Dialog open fullWidth maxWidth="sm" ref={captchaContainerRef}>
       <DialogContent>
-        <Box
-          sx={{ display: "flex", justifyContent: "center", alignItems: "center" }}
-          data-testid="aws-waf-captcha-dialog"
-          ref={captchaRef}
-        >
+        <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center" }} ref={captchaRef}>
           <CircularProgress />
         </Box>
       </DialogContent>
